@@ -24,6 +24,7 @@ import {
   deleteCard,
   getAllCards,
   incrementCardUsage,
+  mergeIncomingCards,
   saveCard,
   saveMultipleCards,
   syncFromServerOrHash,
@@ -566,6 +567,15 @@ export function App() {
             setAddModalState((prev) => ({ ...prev, open: false, editingCard: null }))
           }
           onSave={handleSaveCard}
+          onImportTransferCards={async (transferCards) => {
+            const { added } = await mergeIncomingCards(transferCards);
+            await refreshCards();
+            showToast(
+              added > 0
+                ? `${added} ${added === 1 ? 'carta trasferita' : 'carte trasferite'} sul telefono!`
+                : 'Carte già presenti sul dispositivo'
+            );
+          }}
         />
       )}
 

@@ -6,7 +6,9 @@ import {
   Copy,
   Download,
   HardDrive,
+  Maximize2,
   QrCode,
+  Share2,
   Smartphone,
   Upload,
   X,
@@ -42,6 +44,7 @@ export function BackupModal({
   const [transferUrl, setTransferUrl] = useState<string>('');
   const [usedSyncFallback, setUsedSyncFallback] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState(false);
+  const [qrFullScreen, setQrFullScreen] = useState(false);
 
   const cardCount = cards.length;
   const currentAppBaseUrl =
@@ -71,11 +74,11 @@ export function BackupModal({
     }
 
     QRCode.toDataURL(url, {
-      width: 260,
-      margin: 2,
-      errorCorrectionLevel: url.length > 800 ? 'L' : 'M',
+      width: 480,
+      margin: 4,
+      errorCorrectionLevel: url.length > 500 ? 'L' : 'M',
       color: {
-        dark: '#0f172a',
+        dark: '#000000',
         light: '#ffffff',
       },
     })
@@ -212,19 +215,29 @@ export function BackupModal({
           ) : (
             <div className="flex flex-col items-center gap-3">
               {qrImageUrl && (
-                <div className="rounded-2xl bg-white p-3 shadow-xl">
+                <button
+                  type="button"
+                  onClick={() => setQrFullScreen(true)}
+                  className="group relative rounded-2xl bg-white p-3 shadow-xl active:scale-[0.98] transition-transform"
+                  title="Tocca per ingrandire il QR Code"
+                >
                   <img
                     src={qrImageUrl}
                     alt="QR Code trasferimento carte su smartphone"
-                    className="h-52 w-52 object-contain"
+                    className="h-64 w-64 sm:h-72 sm:w-72 object-contain"
+                    style={{ imageRendering: 'pixelated' }}
                   />
-                </div>
+                  <span className="mt-1 inline-flex items-center gap-1 text-[11px] font-semibold text-slate-600">
+                    <Maximize2 className="h-3.5 w-3.5" />
+                    Tocca per ingrandire a schermo intero
+                  </span>
+                </button>
               )}
 
               <p className="text-center text-xs text-slate-300 leading-relaxed">
                 {usedSyncFallback
                   ? 'Inquadra questo QR Code dal telefono (stessa rete Wi-Fi): scaricherà automaticamente tutte le carte dal PC!'
-                  : 'Inquadra questo QR Code con la fotocamera del telefonino: si aprirà l’app sul telefono con tutte le tue carte già salvate!'}
+                  : 'Inquadra con la fotocamera del telefonino (oppure dentro l’app su Scansiona). Se non mette a fuoco, tocca il QR per ingrandirlo.'}
               </p>
 
               {isLocalhostOnly && (
@@ -238,6 +251,23 @@ export function BackupModal({
                   <span className="flex-1 truncate font-mono text-[11px] text-slate-400">
                     {lanUrl || effectiveBaseUrl}
                   </span>
+                  {typeof navigator !== 'undefined' && typeof navigator.share === 'function' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator
+                          .share({
+                            title: 'Le mie Carte Fedeltà',
+                            url: transferUrl,
+                          })
+                          .catch(() => {});
+                      }}
+                      className="flex min-h-[36px] shrink-0 items-center gap-1 rounded-lg bg-indigo-600 px-2.5 text-xs font-semibold text-white active:scale-95 transition-transform"
+                    >
+                      <Share2 className="h-3.5 w-3.5" />
+                      Invia
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={handleCopyTransferLink}
@@ -364,6 +394,32 @@ export function BackupModal({
           )}
         </section>
       </div>
+
+      {/* Modalità QR Code a schermo intero ad altissimo contrasto */}
+      {qrFullScreen && qrImageUrl && (
+        <div
+          className="fixed inset-0 z-[70] flex flex-col items-center justify-center bg-white p-4"
+          onClick={() => setQrFullScreen(false)}
+        >
+          <button
+            type="button"
+            onClick={() => setQrFullScreen(false)}
+            className="fixed top-4 right-4 flex h-12 w-12 items-center justify-center rounded-full bg-slate-900 text-white shadow-lg"
+            aria-label="Chiudi QR ingrandito"
+          >
+            <X className="h-6 w-6" />
+          </button>
+          <img
+            src={qrImageUrl}
+            alt="QR Code ingrandito"
+            className="h-[80vmin] w-[80vmin] max-w-[540px] max-h-[540px] object-contain"
+            style={{ imageRendering: 'pixelated' }}
+          />
+          <p className="mt-3 text-sm font-semibold text-slate-700 text-center">
+            Inquadra con la fotocamera del telefonino • Tocca per chiudere
+          </p>
+        </div>
+      )}
     </div>
   );
 }

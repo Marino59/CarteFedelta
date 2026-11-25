@@ -24,6 +24,7 @@ import {
   normalizeDecodedBarcode,
 } from '../services/barcodeScanner';
 import { createCardId } from '../services/db';
+import { decodeCardsFromTransferHash } from '../services/klarnaPasteParser';
 import {
   BARCODE_FORMAT_OPTIONS,
   CARD_COLORS,
@@ -42,6 +43,7 @@ interface AddCardModalProps {
   editingCard?: LoyaltyCard | null;
   onClose: () => void;
   onSave: (card: LoyaltyCard) => Promise<void> | void;
+  onImportTransferCards?: (cards: LoyaltyCard[]) => Promise<void> | void;
 }
 
 export function AddCardModal({
@@ -49,6 +51,7 @@ export function AddCardModal({
   editingCard = null,
   onClose,
   onSave,
+  onImportTransferCards,
 }: AddCardModalProps) {
   const [activeTab, setActiveTab] = useState<EntryTab>(editingCard ? 'manual' : initialTab);
 
@@ -163,6 +166,15 @@ export function AddCardModal({
             const detectedFormat = normalized.format;
             if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
               navigator.vibrate(60);
+            }
+
+            if (code.includes('#import=') && onImportTransferCards) {
+              const transferCards = decodeCardsFromTransferHash(code);
+              if (transferCards.length > 0) {
+                stopLiveCamera();
+                void Promise.resolve(onImportTransferCards(transferCards)).then(() => onClose());
+                return;
+              }
             }
 
             setCardNumber(code);
