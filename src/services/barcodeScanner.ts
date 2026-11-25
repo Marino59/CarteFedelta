@@ -12,7 +12,7 @@ import {
   RGBLuminanceSource,
 } from '@zxing/library';
 import { createWorker, type Worker as TesseractWorker } from 'tesseract.js';
-import { findClosestStoreByColor, matchStoreFromText, type StorePreset } from '../data/italianStores';
+import { matchStoreFromText, type StorePreset } from '../data/italianStores';
 import type { BarcodeFormatType, CardCategory } from '../types/card';
 import {
   detectBestBarcodeFormat,
@@ -1420,28 +1420,6 @@ async function recognizeImageTextWithTimeout(
   }
 }
 
-function guessStoreNameFromOcrOrFile(ocrText: string, fileName: string): string {
-  const lines = ocrText
-    .split(/\r?\n/)
-    .map((line) => line.replace(/[^a-zA-Z0-9àèéìòùÀÈÉÌÒÙ&' .-]/g, ' ').trim())
-    .filter((line) => line.length >= 3 && !/^\d[\d\s-]*$/.test(line));
-
-  if (lines.length > 0) {
-    return lines[0].slice(0, 32);
-  }
-
-  const cleanedFile = fileName
-    .replace(/\.[^.]+$/, '')
-    .replace(/screenshot|klarna|stocard|img|pxl|whatsapp|image|\d{6,}/gi, ' ')
-    .replace(/[_-]+/g, ' ')
-    .trim();
-
-  if (cleanedFile.length >= 3) {
-    return cleanedFile.slice(0, 32);
-  }
-  return '';
-}
-
 export async function analyzeKlarnaScreenshot(
   file: File,
   tempId: string
@@ -1461,11 +1439,10 @@ export async function analyzeKlarnaScreenshot(
     let ocrText = '';
     let decoded = decodedOptical;
 
-    // 2. Se serve il negozio o se la lettura ottica delle barre non ha trovato il codice, usa OCR
+    // 2. Esegue OCR sull'intera immagine per cercare il nome reale del negozio (ovunque sia scritto)
+    //    e, se necessario, estrarre il codice numerico
     if (!matchedStore || !decoded) {
-      const yStart = !decoded ? 0 : 0.03;
-      const yEnd = !decoded ? 1 : 0.45;
-      ocrText = await recognizeImageTextWithTimeout(workingCanvas, 5000, yStart, yEnd);
+      ocrText = await recognizeImageTextWithTimeout(workingCanvas, 5000, 0, 1);
       if (ocrText) {
         if (!matchedStore) {
           matchedStore = matchStoreFromText(ocrText);
@@ -1476,24 +1453,18 @@ export async function analyzeKlarnaScreenshot(
       }
     }
 
-    // 3. Fallback sul colore brand tipico dello screenshot
-    const colorMatch = !matchedStore ? findClosestStoreByColor(dominantColor) : null;
-    const finalStore = matchedStore || colorMatch;
-
-    const guessedName = finalStore
-      ? finalStore.name
-      : guessStoreNameFromOcrOrFile(ocrText, file.name);
-
+    // Se il negozio non è riconosciuto con certezza dal testo dell'immagine,
+    // NON inventarlo dal colore o dal nome file: lascia il campo vuoto per l'utente.
     return {
       tempId,
       fileName: file.name,
       previewImage,
       cardNumber: decoded?.code || '',
-      barcodeFormat: decoded?.format || finalStore?.defaultFormat || 'CODE128',
-      storeName: guessedName,
-      color: finalStore?.color || dominantColor,
-      category: finalStore?.category || 'other',
-      matchedStore: finalStore,
+      barcodeFormat: decoded?.format || matchedStore?.defaultFormat || 'CODE128',
+      storeName: matchedStore ? matchedStore.name : '',
+      color: matchedStore?.color || dominantColor,
+      category: matchedStore?.category || 'other',
+      matchedStore,
       ocrText,
       status: decoded?.code ? 'decoded' : 'needs_code',
     };
