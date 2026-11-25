@@ -21,6 +21,7 @@ import {
   compressImage,
   decodeBarcodeFromImage,
   mapZXingFormatToType,
+  normalizeDecodedBarcode,
 } from '../services/barcodeScanner';
 import { createCardId } from '../services/db';
 import {
@@ -151,10 +152,15 @@ export function AddCardModal({
           videoEl,
           (result, _err) => {
             if (cancelled || !result) return;
-            const code = result.getText()?.trim();
-            if (!code) return;
+            const rawCode = result.getText()?.trim();
+            if (!rawCode) return;
 
-            const detectedFormat = mapZXingFormatToType(result.getBarcodeFormat());
+            const normalized = normalizeDecodedBarcode(
+              rawCode,
+              mapZXingFormatToType(result.getBarcodeFormat())
+            );
+            const code = normalized.code;
+            const detectedFormat = normalized.format;
             if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
               navigator.vibrate(60);
             }

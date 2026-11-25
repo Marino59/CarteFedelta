@@ -519,6 +519,19 @@ export function locateBarcodeBoxes(img: GrayImage): BarcodeBox[] {
     });
 }
 
+export function normalizeDecodedBarcode(code: string, format: BarcodeFormatType): DecodedBarcode {
+  const trimmed = code.trim();
+  // In Europa/Italia, i codici EAN-13 che iniziano con '0' (es. 0414611495429)
+  // vengono spesso letti da ZXing/Chrome BarcodeDetector come UPC-A a 12 cifre senza lo '0' iniziale.
+  if (format === 'UPC' && /^\d{12}$/.test(trimmed)) {
+    return {
+      code: `0${trimmed}`,
+      format: 'EAN13',
+    };
+  }
+  return { code: trimmed, format };
+}
+
 function tryDecodeGrayWithZXing(
   img: GrayImage,
   reader: MultiFormatReader
@@ -543,10 +556,7 @@ function tryDecodeGrayWithZXing(
       const result = reader.decodeWithState(makeBitmap());
       const text = result.getText()?.trim();
       if (text) {
-        return {
-          code: text,
-          format: mapZXingFormatToType(result.getBarcodeFormat()),
-        };
+        return normalizeDecodedBarcode(text, mapZXingFormatToType(result.getBarcodeFormat()));
       }
     } catch {
       // Passa al tentativo successivo
@@ -1177,10 +1187,7 @@ async function tryNativeBarcodeDetector(canvas: HTMLCanvasElement): Promise<Deco
     for (const item of results) {
       const value = item.rawValue?.trim();
       if (value) {
-        return {
-          code: value,
-          format: mapNativeFormatToType(item.format),
-        };
+        return normalizeDecodedBarcode(value, mapNativeFormatToType(item.format));
       }
     }
   } catch {
