@@ -149,24 +149,24 @@ function extractInlineStoreAndCode(line: string): { storePart: string; codePart:
 
   // 2. Nome negozio seguito da uno spazio e un blocco numerico (anche spaziato es. "Esselunga 0401 2345 6789 0")
   const trailingDigitsMatch = trimmed.match(
-    /^([A-Za-zÀ-ÿ0-9&'.,/ ]{2,}?)\s+((?:\d[\s-]?){5,28}\d)$/
+    /^([A-Za-zÀ-ÿ0-9&'.,/ ]+?)\s+((?:\d[\s-]?){5,28}\d)$/
   );
   if (trailingDigitsMatch) {
     const storePart = trailingDigitsMatch[1].trim();
     const codePart = normalizePastedCode(trailingDigitsMatch[2]);
-    if (storePart && !/^\d+$/.test(storePart) && codePart.length >= 5) {
+    if (storePart.length >= 2 && /[A-Za-zÀ-ÿ]/.test(storePart) && codePart.length >= 5) {
       return { storePart, codePart };
     }
   }
 
   // 3. Nome negozio seguito da codice alfanumerico contenente cifre (es. "Decathlon DEC123456")
   const trailingAlphaNumMatch = trimmed.match(
-    /^([A-Za-zÀ-ÿ&'.,/ ]{2,}?)\s+([A-Z0-9_-]*\d[A-Z0-9_-]{3,})$/i
+    /^([A-Za-zÀ-ÿ&'.,/ ]+?)\s+([A-Z0-9_-]*\d[A-Z0-9_-]{3,})$/i
   );
   if (trailingAlphaNumMatch) {
     const storePart = trailingAlphaNumMatch[1].trim();
     const codePart = trailingAlphaNumMatch[2].trim();
-    if (storePart && codePart.length >= 5) {
+    if (storePart.length >= 2 && /[A-Za-zÀ-ÿ]/.test(storePart) && codePart.length >= 5) {
       return { storePart, codePart };
     }
   }
@@ -210,20 +210,20 @@ export function parseKlarnaPastedText(rawText: string): ParsedPasteCard[] {
   };
 
   for (const line of lines) {
-    // Prova prima a vedere se la riga contiene sia negozio che codice
-    const inline = extractInlineStoreAndCode(line);
-    if (inline) {
-      pushUnique(buildParsedCard(inline.storePart, inline.codePart));
+    // Controlla prima se l'intera riga è un codice (es. "0 414 611 495 429")
+    const standaloneCode = isStandaloneCodeCandidate(line);
+    if (standaloneCode) {
+      const storeLabel = pendingStore || 'Carta Fedeltà';
+      pushUnique(buildParsedCard(storeLabel, standaloneCode));
       pendingStore = null;
       pendingMatchedStore = null;
       continue;
     }
 
-    // Altrimenti controlla se la riga è solo un codice
-    const standaloneCode = isStandaloneCodeCandidate(line);
-    if (standaloneCode) {
-      const storeLabel = pendingStore || 'Carta Fedeltà';
-      pushUnique(buildParsedCard(storeLabel, standaloneCode));
+    // Altrimenti prova a vedere se la riga contiene sia negozio che codice
+    const inline = extractInlineStoreAndCode(line);
+    if (inline) {
+      pushUnique(buildParsedCard(inline.storePart, inline.codePart));
       pendingStore = null;
       pendingMatchedStore = null;
       continue;
