@@ -16,6 +16,7 @@ import { findClosestStoreByColor, matchStoreFromText, type StorePreset } from '.
 import type { BarcodeFormatType, CardCategory } from '../types/card';
 import {
   detectBestBarcodeFormat,
+  isValidGs1CheckDigit,
   normalizePastedCode,
   parseKlarnaPastedText,
 } from './klarnaPasteParser';
@@ -813,6 +814,249 @@ export function decodeCode128Subpixel(img: GrayImage): DecodedBarcode | null {
   return null;
 }
 
+const EAN_L_PATTERNS: readonly (readonly number[])[] = [
+  [3, 2, 1, 1],
+  [2, 2, 2, 1],
+  [2, 1, 2, 2],
+  [1, 4, 1, 1],
+  [1, 1, 3, 2],
+  [1, 2, 3, 1],
+  [1, 1, 1, 4],
+  [1, 3, 1, 2],
+  [1, 2, 1, 3],
+  [3, 1, 1, 2],
+];
+const EAN_G_PATTERNS: readonly (readonly number[])[] = EAN_L_PATTERNS.map((p) =>
+  [...p].reverse()
+);
+const EAN13_PARITY_FIRST_DIGIT: Record<string, string> = {
+  LLLLLL: '0',
+  LLGLGG: '1',
+  LLGGLG: '2',
+  LLGGGL: '3',
+  LGLLGG: '4',
+  LGGLLG: '5',
+  LGGGLL: '6',
+  LGLGLG: '7',
+  LGLGGL: '8',
+  LGGLGL: '9',
+};
+
+function matchEanDigit(
+  runs: number[],
+  offset: number,
+  allowG: boolean
+): { digit: string; parity: 'L' | 'G'; err: number; maxErr: number } {
+  const sum = runs[offset] + runs[offset + 1] + runs[offset + 2] + runs[offset + 3];
+  if (sum <= 0) return { digit: '0', parity: 'L', err: Infinity, maxErr: Infinity };
+  const scale = 7 / sum;
+
+  let bestDigit = '0';
+  let bestParity: 'L' | 'G' = 'L';
+  let bestErr = Infinity;
+  let bestMaxErr = Infinity;
+
+  for (let d = 0; d < 10; d++) {
+    const patL = EAN_L_PATTERNS[d];
+    let errL = 0;
+    let maxL = 0;
+    for (let k = 0; k < 4; k++) {
+      const diff = Math.abs(runs[offset + k] * scale - patL[k]);
+      errL += diff;
+      if (diff > maxL) maxL = diff;
+    }
+    if (errL < bestErr) {
+      bestErr = errL;
+      bestMaxErr = maxL;
+      bestDigit = String(d);
+      bestParity = 'L';
+    }
+
+    if (allowG) {
+      const patG = EAN_G_PATTERNS[d];
+      let errG = 0;
+      let maxG = 0;
+      for (let k = 0; k < 4; k++) {
+        const diff = Math.abs(runs[offset + k] * scale - patG[k]);
+        errG += diff;
+        if (diff > maxG) maxG = diff;
+      }
+      if (errG < bestErr) {
+        bestErr = errG;
+        bestMaxErr = maxG;
+        bestDigit = String(d);
+        bestParity = 'G';
+      }
+    }
+  }
+
+  return { digit: bestDigit, parity: bestParity, err: bestErr, maxErr: bestMaxErr };
+}
+
+function isUniformGuard(runs: number[], offset: number, count: number): boolean {
+  let sum = 0;
+  for (let k = 0; k < count; k++) sum += runs[offset + k];
+  if (sum <= 0) return false;
+  const avg = sum / count;
+  for (let k = 0; k < count; k++) {
+    if (Math.abs(runs[offset + k] / avg - 1) > 0.65) {
+      return false;
+    }
+  }
+  return true;
+}
+
+export function decodeEanSubpixel(img: GrayImage): DecodedBarcode | null {
+  const { data, width, height } = img;
+  if (width < 40 || height < 6) return null;
+
+  const bands: readonly [number, number][] = [
+    [0.35, 0.65],
+    [0.25, 0.55],
+    [0.45, 0.75],
+    [0.2, 0.8],
+    [0.05, 0.95],
+  ];
+
+  const profile = new Float64Array(width + 2);
+
+  for (const [y1Ratio, y2Ratio] of bands) {
+    const y1 = Math.floor(height * y1Ratio);
+    const y2 = Math.max(y1 + 1, Math.floor(height * y2Ratio));
+    const rows = y2 - y1;
+
+    let minLum = 255;
+    let maxLum = 0;
+    profile[0] = 255;
+    profile[width + 1] = 255;
+
+    for (let x = 0; x < width; x++) {
+      let sum = 0;
+      for (let y = y1; y < y2; y++) {
+        sum += data[y * width + x];
+      }
+      const avg = sum / rows;
+      profile[x + 1] = avg;
+      if (avg < minLum) minLum = avg;
+      if (avg > maxLum) maxLum = avg;
+    }
+
+    if (maxLum - minLum < 45) continue;
+
+    const mid = (minLum + maxLum) * 0.5;
+    const candidateThresholds = [mid, 128, mid - 18, mid + 18].filter(
+      (t) => t > minLum + 8 && t < maxLum - 8
+    );
+
+    for (const thresh of candidateThresholds) {
+      const edges: number[] = [];
+      for (let i = 0; i <= width; i++) {
+        const a = profile[i];
+        const b = profile[i + 1];
+        if ((a < thresh) !== (b < thresh)) {
+          edges.push(i + (thresh - a) / (b - a));
+        }
+      }
+
+      if (edges.length < 44) continue;
+      const subRuns: number[] = [];
+      for (let i = 0; i < edges.length - 1; i++) {
+        subRuns.push(edges[i + 1] - edges[i]);
+      }
+
+      // Prova sia EAN-13 (59 run) che EAN-8 (43 run) partendo da ogni barra nera
+      for (let startIdx = 0; startIdx + 43 <= subRuns.length; startIdx += 2) {
+        if (!isUniformGuard(subRuns, startIdx, 3)) continue;
+
+        const guardWidth = subRuns[startIdx] + subRuns[startIdx + 1] + subRuns[startIdx + 2];
+        if (startIdx >= 2 && subRuns[startIdx - 1] < guardWidth * 0.8) {
+          continue;
+        }
+
+        // Tentativo EAN-13 (59 run)
+        if (startIdx + 59 <= subRuns.length) {
+          const midOffset = startIdx + 3 + 24;
+          const endOffset = midOffset + 5 + 24;
+          if (
+            isUniformGuard(subRuns, midOffset, 5) &&
+            isUniformGuard(subRuns, endOffset, 3)
+          ) {
+            let validDigits = true;
+            let parities = '';
+            let digits = '';
+
+            for (let d = 0; d < 6; d++) {
+              const hit = matchEanDigit(subRuns, startIdx + 3 + d * 4, true);
+              if (hit.maxErr > 0.85 || hit.err > 2.0) {
+                validDigits = false;
+                break;
+              }
+              parities += hit.parity;
+              digits += hit.digit;
+            }
+
+            if (validDigits) {
+              const firstDigit = EAN13_PARITY_FIRST_DIGIT[parities];
+              if (firstDigit) {
+                for (let d = 0; d < 6; d++) {
+                  const hit = matchEanDigit(subRuns, midOffset + 5 + d * 4, false);
+                  if (hit.maxErr > 0.85 || hit.err > 2.0) {
+                    validDigits = false;
+                    break;
+                  }
+                  digits += hit.digit;
+                }
+                if (validDigits) {
+                  const candidate = firstDigit + digits;
+                  if (isValidGs1CheckDigit(candidate)) {
+                    return { code: candidate, format: 'EAN13' };
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        // Tentativo EAN-8 (43 run)
+        if (startIdx + 43 <= subRuns.length) {
+          const midOffset = startIdx + 3 + 16;
+          const endOffset = midOffset + 5 + 16;
+          if (
+            isUniformGuard(subRuns, midOffset, 5) &&
+            isUniformGuard(subRuns, endOffset, 3)
+          ) {
+            let validDigits = true;
+            let digits = '';
+            for (let d = 0; d < 4; d++) {
+              const hit = matchEanDigit(subRuns, startIdx + 3 + d * 4, false);
+              if (hit.maxErr > 0.85 || hit.err > 2.0) {
+                validDigits = false;
+                break;
+              }
+              digits += hit.digit;
+            }
+            if (validDigits) {
+              for (let d = 0; d < 4; d++) {
+                const hit = matchEanDigit(subRuns, midOffset + 5 + d * 4, false);
+                if (hit.maxErr > 0.85 || hit.err > 2.0) {
+                  validDigits = false;
+                  break;
+                }
+                digits += hit.digit;
+              }
+              if (validDigits && isValidGs1CheckDigit(digits)) {
+                return { code: digits, format: 'EAN8' };
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
 export function decodeBarcodeFromLuminance(
   luminances: Uint8ClampedArray,
   width: number,
@@ -825,9 +1069,12 @@ export function decodeBarcodeFromLuminance(
   const fullHit = tryMultiThresholdDecode(baseImg, reader);
   if (fullHit) return fullHit;
 
-  // 1b. Decodificatore CODE 128 sub-pixel (ideale per catture schermo piccole/compresse 1.1px/modulo)
-  const subpixelFull = decodeCode128Subpixel(baseImg);
-  if (subpixelFull) return subpixelFull;
+  // 1b. Decodificatori sub-pixel (ideali per catture schermo piccole/compresse 1.1px/modulo)
+  const subpixelCode128 = decodeCode128Subpixel(baseImg);
+  if (subpixelCode128) return subpixelCode128;
+
+  const subpixelEan = decodeEanSubpixel(baseImg);
+  if (subpixelEan) return subpixelEan;
 
   // 2. Localizzatore automatico regione codice a barre (per catture schermo PC intere o con bordi scuri)
   const candidateBoxes = locateBarcodeBoxes(baseImg);
@@ -837,8 +1084,11 @@ export function decodeBarcodeFromLuminance(
     const regionHit = tryMultiThresholdDecode(region, reader, boxScale);
     if (regionHit) return regionHit;
 
-    const subpixelRegion = decodeCode128Subpixel(region);
-    if (subpixelRegion) return subpixelRegion;
+    const subpixelRegion128 = decodeCode128Subpixel(region);
+    if (subpixelRegion128) return subpixelRegion128;
+
+    const subpixelRegionEan = decodeEanSubpixel(region);
+    if (subpixelRegionEan) return subpixelRegionEan;
   }
 
   // 3. Ritagli orizzontali a larghezza piena (0..1) per screenshot verticali
@@ -867,6 +1117,9 @@ export function decodeBarcodeFromLuminance(
   const subpixelRot = decodeCode128Subpixel(rotated);
   if (subpixelRot) return subpixelRot;
 
+  const subpixelRotEan = decodeEanSubpixel(rotated);
+  if (subpixelRotEan) return subpixelRotEan;
+
   const rotBoxes = locateBarcodeBoxes(rotated);
   for (const box of rotBoxes) {
     const region = cropGrayImage(rotated, box.x, box.y, box.w, box.h);
@@ -876,6 +1129,9 @@ export function decodeBarcodeFromLuminance(
 
     const subpixelRotRegion = decodeCode128Subpixel(region);
     if (subpixelRotRegion) return subpixelRotRegion;
+
+    const subpixelRotRegionEan = decodeEanSubpixel(region);
+    if (subpixelRotRegionEan) return subpixelRotRegionEan;
   }
 
   return null;

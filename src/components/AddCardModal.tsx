@@ -274,7 +274,9 @@ export function AddCardModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanStore = storeName.trim();
-    const cleanCode = cardNumber.trim();
+    const rawCode = cardNumber.trim();
+    const numericFormats = new Set<BarcodeFormatType>(['EAN13', 'EAN8', 'UPC', 'ITF']);
+    const cleanCode = numericFormats.has(barcodeFormat) ? rawCode.replace(/[\s-]+/g, '') : rawCode;
 
     if (!cleanStore) {
       setFormError('Inserisci o seleziona il nome del negozio.');

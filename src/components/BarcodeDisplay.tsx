@@ -31,23 +31,33 @@ export function renderBarcodeToSvg(
     return { renderedFormat: preferredFormat, fallbackUsed: false, error: 'Codice vuoto' };
   }
 
+  const numericFormats = new Set<BarcodeFormatType>(['EAN13', 'EAN8', 'UPC', 'ITF']);
+  const normalized = numericFormats.has(preferredFormat)
+    ? trimmed.replace(/[\s-]+/g, '')
+    : trimmed;
+
+  const defaultBarWidth = options?.barWidth ?? (normalized.length > 16 ? 2 : 3);
+  const defaultMargin = options?.margin ?? 32;
+
   const baseOptions = {
     lineColor: '#000000',
     background: '#ffffff',
-    width: options?.barWidth ?? 2.2,
+    width: Math.max(1, Math.round(defaultBarWidth)),
     height: options?.height ?? 100,
     displayValue: options?.displayValue ?? false,
-    margin: options?.margin ?? 12,
+    margin: defaultMargin,
     fontSize: 16,
   };
 
-  const tryFormat = (fmt: BarcodeFormatType): boolean => {
+  const tryFormat = (fmt: BarcodeFormatType, valueToEncode: string): boolean => {
     let validResult = true;
     try {
       svgElement.innerHTML = '';
-      JsBarcode(svgElement, trimmed, {
+      const isEan = fmt === 'EAN13' || fmt === 'EAN8';
+      JsBarcode(svgElement, valueToEncode, {
         ...baseOptions,
         format: fmt,
+        ...(isEan ? { flat: true } : {}),
         valid: (valid) => {
           validResult = valid;
         },
@@ -58,12 +68,12 @@ export function renderBarcodeToSvg(
     }
   };
 
-  if (preferredFormat !== 'QR' && tryFormat(preferredFormat)) {
+  if (preferredFormat !== 'QR' && tryFormat(preferredFormat, normalized)) {
     return { renderedFormat: preferredFormat, fallbackUsed: false };
   }
 
   // Fallback automatico a CODE128 per garantire sempre un codice leggibile alla cassa
-  if (preferredFormat !== 'CODE128' && tryFormat('CODE128')) {
+  if (preferredFormat !== 'CODE128' && tryFormat('CODE128', normalized)) {
     return { renderedFormat: 'CODE128', fallbackUsed: true };
   }
 
@@ -133,8 +143,8 @@ export function BarcodeDisplay({
     const result = renderBarcodeToSvg(svg, trimmedCode, format, {
       height,
       displayValue,
-      barWidth: compact ? 1.8 : 2.4,
-      margin: compact ? 8 : 14,
+      barWidth: compact ? 2 : trimmedCode.length > 16 ? 2 : 3,
+      margin: compact ? 16 : 32,
     });
 
     setFallbackUsed(result.fallbackUsed);
@@ -174,6 +184,7 @@ export function BarcodeDisplay({
     <div className={`flex flex-col items-center justify-center rounded-2xl bg-white px-3 py-2 ${className}`}>
       <svg
         ref={svgRef}
+        shapeRendering="crispEdges"
         className="max-w-full h-auto"
         role="img"
         aria-label={`Codice a barre ${trimmedCode}`}
