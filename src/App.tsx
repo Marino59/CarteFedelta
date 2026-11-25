@@ -300,19 +300,19 @@ export function App() {
   };
 
   return (
-    <div className="min-h-[100dvh] flex flex-col bg-slate-950 text-slate-100 safe-top pb-[calc(6.75rem+env(safe-area-inset-bottom))]">
+    <div className="min-h-[100dvh] flex flex-col bg-slate-950 text-slate-100 safe-top pb-[calc(7.25rem+env(safe-area-inset-bottom))]">
       {/* Sticky Glass Header */}
-      <header className="sticky top-0 z-30 border-b border-slate-800/80 bg-slate-950/90 px-4 py-3.5 backdrop-blur-md">
-        <div className="mx-auto flex max-w-xl items-center justify-between gap-3">
+      <header className="sticky top-0 z-30 border-b border-slate-800/80 bg-slate-950/90 px-3 sm:px-4 py-3.5 backdrop-blur-md">
+        <div className="mx-auto flex w-full lg:max-w-3xl items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-indigo-700 shadow-md shadow-indigo-950/60">
-              <Barcode className="h-6 w-6 text-white" />
+            <div className="flex h-13 w-13 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-indigo-700 shadow-md shadow-indigo-950/60">
+              <Barcode className="h-7 w-7 text-white" />
             </div>
             <div className="min-w-0">
-              <h1 className="truncate text-xl font-bold tracking-tight text-white">
+              <h1 className="truncate text-2xl font-extrabold tracking-tight text-white">
                 Carte Fedeltà
               </h1>
-              <div className="flex items-center gap-2 text-xs text-slate-400">
+              <div className="flex items-center gap-2 text-sm text-slate-400">
                 <span>
                   {cards.length} {cards.length === 1 ? 'carta salvata' : 'carte salvate'}
                 </span>
@@ -331,10 +331,10 @@ export function App() {
               <button
                 type="button"
                 onClick={() => setBackupOpen(true)}
-                className="inline-flex min-h-[52px] items-center gap-1.5 rounded-2xl bg-indigo-600/20 border border-indigo-500/35 px-3.5 text-sm font-bold text-indigo-200 active:scale-95 transition-transform"
+                className="inline-flex min-h-[56px] items-center gap-2 rounded-2xl bg-indigo-600/20 border border-indigo-500/35 px-4 text-sm sm:text-base font-bold text-indigo-200 active:scale-95 transition-transform"
                 title="Passa le carte al telefonino via QR"
               >
-                <QrCode className="h-5 w-5 text-indigo-400" />
+                <QrCode className="h-6 w-6 text-indigo-400" />
                 <span className="hidden sm:inline">Passa al Telefono</span>
               </button>
             )}
@@ -343,10 +343,10 @@ export function App() {
               onClick={() =>
                 setAddModalState({ open: true, initialTab: 'manual', editingCard: null })
               }
-              className="flex min-h-[52px] min-w-[52px] items-center justify-center gap-1.5 rounded-2xl bg-indigo-600 px-3.5 text-sm font-bold text-white shadow-lg active:scale-95 transition-transform"
+              className="flex min-h-[56px] min-w-[56px] items-center justify-center gap-1.5 rounded-2xl bg-indigo-600 px-4 text-base font-bold text-white shadow-lg active:scale-95 transition-transform"
               aria-label="Aggiungi carta"
             >
-              <Plus className="h-6 w-6" />
+              <Plus className="h-7 w-7" />
               <span className="hidden sm:inline">Nuova</span>
             </button>
           </div>
@@ -354,10 +354,10 @@ export function App() {
 
         {/* Barra di ricerca, Riordina e Filtri */}
         {cards.length > 0 && (
-          <div className="mx-auto mt-3.5 max-w-xl space-y-3">
+          <div className="mx-auto mt-3.5 w-full lg:max-w-3xl space-y-3">
             <div className="flex items-center gap-2">
               <div className="relative flex-1">
-                <Search className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" />
+                <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" />
                 <input
                   type="search"
                   value={searchQuery}
@@ -366,13 +366,13 @@ export function App() {
                     setSearchQuery(e.target.value);
                   }}
                   placeholder="Cerca negozio o codice..."
-                  className="w-full min-h-[52px] rounded-2xl border border-slate-800 bg-slate-900/90 pl-11 pr-10 text-base text-white placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none"
+                  className="w-full min-h-[56px] rounded-2xl border border-slate-800 bg-slate-900/90 pl-12 pr-10 text-base text-white placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none"
                 />
                 {searchQuery && (
                   <button
                     type="button"
                     onClick={() => setSearchQuery('')}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 flex h-10 w-10 items-center justify-center rounded-full text-slate-400"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 flex h-11 w-11 items-center justify-center rounded-full text-slate-400"
                     aria-label="Pulisci ricerca"
                   >
                     <X className="h-5 w-5" />
@@ -384,7 +384,7 @@ export function App() {
                 <button
                   type="button"
                   onClick={toggleReorderMode}
-                  className={`flex min-h-[52px] shrink-0 items-center gap-1.5 rounded-2xl border px-3.5 text-sm font-bold active:scale-95 transition-all ${
+                  className={`flex min-h-[56px] shrink-0 items-center gap-2 rounded-2xl border px-4 text-base font-bold active:scale-95 transition-all ${
                     isReordering
                       ? 'border-emerald-500 bg-emerald-600 text-white shadow-md'
                       : 'border-slate-800 bg-slate-900 text-slate-200'
@@ -392,7 +392,7 @@ export function App() {
                 >
                   {isReordering ? (
                     <>
-                      <Check className="h-5 w-5" />
+                      <Check className="h-6 w-6" />
                       <span>Fatto</span>
                     </>
                   ) : (
@@ -408,17 +408,17 @@ export function App() {
                 <button
                   type="button"
                   onClick={cycleSortMode}
-                  className="flex min-h-[52px] shrink-0 items-center gap-1.5 rounded-2xl border border-slate-800 bg-slate-900 px-3 text-xs font-bold text-slate-300 active:scale-95 transition-transform"
+                  className="flex min-h-[56px] shrink-0 items-center gap-1.5 rounded-2xl border border-slate-800 bg-slate-900 px-3.5 text-sm font-bold text-slate-300 active:scale-95 transition-transform"
                   title="Cambia ordinamento"
                 >
                   <ArrowDownAZ className="h-5 w-5 text-indigo-400" />
-                  <span className="hidden xs:inline sm:inline">{sortLabel}</span>
+                  <span className="hidden sm:inline">{sortLabel}</span>
                 </button>
               )}
             </div>
 
             {isReordering ? (
-              <div className="rounded-2xl border border-indigo-500/35 bg-indigo-950/40 px-4 py-2.5 text-xs font-medium text-indigo-200">
+              <div className="rounded-2xl border border-indigo-500/35 bg-indigo-950/40 px-4 py-3 text-sm font-medium text-indigo-200">
                 Usa i pulsanti grandi <strong className="text-white">↑</strong> e{' '}
                 <strong className="text-white">↓</strong> per spostare le carte nell’ordine che preferisci, poi tocca <strong className="text-white">Fatto</strong>.
               </div>
@@ -428,7 +428,7 @@ export function App() {
                 <button
                   type="button"
                   onClick={() => setSelectedCategory('all')}
-                  className={`snap-start shrink-0 min-h-[44px] rounded-full px-4 text-sm font-semibold transition-colors ${
+                  className={`snap-start shrink-0 min-h-[48px] rounded-full px-5 text-sm font-bold transition-colors ${
                     selectedCategory === 'all'
                       ? 'bg-indigo-600 text-white'
                       : 'bg-slate-900 text-slate-400 border border-slate-800'
@@ -444,7 +444,7 @@ export function App() {
                       key={cat.value}
                       type="button"
                       onClick={() => setSelectedCategory(cat.value)}
-                      className={`snap-start shrink-0 min-h-[44px] rounded-full px-4 text-sm font-semibold transition-colors ${
+                      className={`snap-start shrink-0 min-h-[48px] rounded-full px-5 text-sm font-bold transition-colors ${
                         selectedCategory === cat.value
                           ? 'bg-indigo-600 text-white'
                           : 'bg-slate-900 text-slate-400 border border-slate-800'
@@ -461,7 +461,7 @@ export function App() {
       </header>
 
       {/* Main Content */}
-      <main className="mx-auto w-full max-w-xl flex-1 px-4 py-4">
+      <main className="mx-auto w-full lg:max-w-3xl flex-1 px-3 sm:px-4 py-4">
         {loading ? (
           <div className="flex flex-col gap-3.5">
             {[1, 2, 3, 4].map((n) => (
@@ -563,7 +563,7 @@ export function App() {
                     void handleOpenCard(card);
                   }
                 }}
-                className={`group relative flex items-stretch overflow-hidden rounded-3xl border bg-slate-900 shadow-lg transition-transform min-h-[96px] ${
+                className={`group relative flex items-stretch overflow-hidden rounded-3xl border bg-slate-900 shadow-lg transition-transform min-h-[116px] ${
                   isReordering
                     ? 'border-indigo-500/45'
                     : 'border-white/10 cursor-pointer active:scale-[0.98]'
@@ -571,14 +571,14 @@ export function App() {
               >
                 {/* Banda laterale colore brand */}
                 <div
-                  className="w-3.5 shrink-0"
+                  className="w-4 shrink-0"
                   style={{ backgroundColor: card.color }}
                 />
 
                 {/* Badge icona/iniziale negozio */}
-                <div className="flex items-center pl-3.5 py-3">
+                <div className="flex items-center pl-4 py-3.5">
                   <div
-                    className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl text-lg font-extrabold text-white shadow-inner"
+                    className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl text-xl font-extrabold text-white shadow-inner"
                     style={{
                       background: `linear-gradient(135deg, ${card.color} 0%, ${card.color}bb 100%)`,
                     }}
@@ -588,31 +588,31 @@ export function App() {
                 </div>
 
                 {/* Testo principale della scheda */}
-                <div className="flex-1 min-w-0 px-3.5 py-3 flex flex-col justify-center">
+                <div className="flex-1 min-w-0 px-4 py-3.5 flex flex-col justify-center">
                   <div className="flex items-center gap-2">
-                    <span className="truncate text-lg sm:text-xl font-bold leading-tight text-white">
+                    <span className="truncate text-2xl font-extrabold leading-tight text-white">
                       {card.storeName}
                     </span>
                     {card.isFavorite && !isReordering && (
-                      <Star className="h-4 w-4 shrink-0 fill-amber-300 text-amber-300" />
+                      <Star className="h-5 w-5 shrink-0 fill-amber-300 text-amber-300" />
                     )}
                   </div>
 
-                  <p className="mt-1 truncate font-mono text-sm text-slate-300">
+                  <p className="mt-1 truncate font-mono text-base text-slate-200">
                     {formatCodeGroups(card.cardNumber)}
                   </p>
 
-                  <div className="mt-1.5 flex items-center gap-2 text-xs text-slate-400">
-                    <span className="inline-flex items-center gap-1 font-medium">
+                  <div className="mt-2 flex items-center gap-2 text-xs text-slate-400">
+                    <span className="inline-flex items-center gap-1.5 font-semibold">
                       <Barcode className="h-4 w-4 text-indigo-400" />
                       {card.barcodeFormat}
                     </span>
                     {card.source === 'klarna' ? (
-                      <span className="rounded-md bg-pink-500/15 px-2 py-0.5 text-[11px] text-pink-300 font-semibold">
+                      <span className="rounded-md bg-pink-500/15 px-2 py-0.5 text-xs text-pink-300 font-semibold">
                         Klarna
                       </span>
                     ) : card.frontImage || card.backImage ? (
-                      <span className="rounded-md bg-slate-800 px-2 py-0.5 text-[11px] text-slate-300 font-medium">
+                      <span className="rounded-md bg-slate-800 px-2 py-0.5 text-xs text-slate-300 font-medium">
                         Foto
                       </span>
                     ) : null}
@@ -621,7 +621,7 @@ export function App() {
 
                 {/* Azioni a destra: Frecce grandi in modalità Ordina oppure Stella + Freccia */}
                 {isReordering ? (
-                  <div className="flex items-center gap-1.5 pr-3">
+                  <div className="flex items-center gap-2 pr-3.5">
                     <GripVertical className="hidden sm:block h-5 w-5 text-slate-500 mr-1" />
                     <button
                       type="button"
@@ -630,10 +630,10 @@ export function App() {
                         e.stopPropagation();
                         void moveCardStep(card.id, -1);
                       }}
-                      className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-800 text-white active:scale-90 transition-transform disabled:opacity-30"
+                      className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-800 text-white active:scale-90 transition-transform disabled:opacity-30"
                       aria-label="Sposta su"
                     >
-                      <ArrowUp className="h-6 w-6" />
+                      <ArrowUp className="h-7 w-7" />
                     </button>
                     <button
                       type="button"
@@ -642,30 +642,30 @@ export function App() {
                         e.stopPropagation();
                         void moveCardStep(card.id, 1);
                       }}
-                      className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-800 text-white active:scale-90 transition-transform disabled:opacity-30"
+                      className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-800 text-white active:scale-90 transition-transform disabled:opacity-30"
                       aria-label="Sposta giù"
                     >
-                      <ArrowDown className="h-6 w-6" />
+                      <ArrowDown className="h-7 w-7" />
                     </button>
                   </div>
                 ) : (
-                  <div className="flex items-center gap-1 pr-3">
+                  <div className="flex items-center gap-1 pr-3.5">
                     <button
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
                         void handleToggleFavorite(card.id);
                       }}
-                      className="flex h-12 w-12 items-center justify-center rounded-2xl text-slate-400 hover:bg-slate-800/70 active:scale-90 transition-transform"
+                      className="flex h-14 w-14 items-center justify-center rounded-2xl text-slate-400 hover:bg-slate-800/70 active:scale-90 transition-transform"
                       aria-label={card.isFavorite ? 'Togli preferito' : 'Metti tra preferiti'}
                     >
                       <Star
-                        className={`h-5 w-5 ${
+                        className={`h-6 w-6 ${
                           card.isFavorite ? 'fill-amber-300 text-amber-300' : 'text-slate-500'
                         }`}
                       />
                     </button>
-                    <ChevronRight className="h-5 w-5 text-slate-600" />
+                    <ChevronRight className="h-6 w-6 text-slate-600" />
                   </div>
                 )}
               </div>
@@ -676,16 +676,16 @@ export function App() {
 
       {/* Bottom Navigation Bar Ergonomica con Pulsanti Grandi (Thumb Zone) */}
       <nav className="fixed bottom-0 inset-x-0 z-40 border-t border-slate-800/80 bg-slate-950/95 backdrop-blur-lg safe-bottom">
-        <div className="mx-auto flex h-[80px] max-w-xl items-center justify-around gap-1.5 px-2.5">
+        <div className="mx-auto flex h-[88px] w-full lg:max-w-3xl items-center justify-around gap-2 px-3">
           <button
             type="button"
             onClick={() =>
               setAddModalState({ open: true, initialTab: 'camera', editingCard: null })
             }
-            className="flex flex-1 min-h-[62px] flex-col items-center justify-center gap-1 rounded-2xl bg-slate-900/80 text-slate-200 active:scale-95 transition-transform"
+            className="flex flex-1 min-h-[68px] flex-col items-center justify-center gap-1.5 rounded-2xl bg-slate-900/90 text-slate-100 active:scale-95 transition-transform"
           >
-            <Camera className="h-6 w-6 text-indigo-400" />
-            <span className="text-xs font-bold">Scansiona</span>
+            <Camera className="h-7 w-7 text-indigo-400" />
+            <span className="text-xs sm:text-sm font-bold">Scansiona</span>
           </button>
 
           <button
@@ -693,28 +693,28 @@ export function App() {
             onClick={() =>
               setAddModalState({ open: true, initialTab: 'photo', editingCard: null })
             }
-            className="flex flex-1 min-h-[62px] flex-col items-center justify-center gap-1 rounded-2xl bg-slate-900/80 text-slate-200 active:scale-95 transition-transform"
+            className="flex flex-1 min-h-[68px] flex-col items-center justify-center gap-1.5 rounded-2xl bg-slate-900/90 text-slate-100 active:scale-95 transition-transform"
           >
-            <ImagePlus className="h-6 w-6 text-emerald-400" />
-            <span className="text-xs font-bold">Fotografa</span>
+            <ImagePlus className="h-7 w-7 text-emerald-400" />
+            <span className="text-xs sm:text-sm font-bold">Fotografa</span>
           </button>
 
           <button
             type="button"
             onClick={() => setKlarnaOpen(true)}
-            className="flex flex-1 min-h-[62px] flex-col items-center justify-center gap-1 rounded-2xl bg-slate-900/80 text-slate-200 active:scale-95 transition-transform"
+            className="flex flex-1 min-h-[68px] flex-col items-center justify-center gap-1.5 rounded-2xl bg-slate-900/90 text-slate-100 active:scale-95 transition-transform"
           >
-            <FolderUp className="h-6 w-6 text-pink-400" />
-            <span className="text-xs font-bold">Da Klarna</span>
+            <FolderUp className="h-7 w-7 text-pink-400" />
+            <span className="text-xs sm:text-sm font-bold">Da Klarna</span>
           </button>
 
           <button
             type="button"
             onClick={() => setBackupOpen(true)}
-            className="flex flex-1 min-h-[62px] flex-col items-center justify-center gap-1 rounded-2xl bg-slate-900/80 text-slate-200 active:scale-95 transition-transform"
+            className="flex flex-1 min-h-[68px] flex-col items-center justify-center gap-1.5 rounded-2xl bg-slate-900/90 text-slate-100 active:scale-95 transition-transform"
           >
-            <HardDrive className="h-6 w-6 text-amber-400" />
-            <span className="text-xs font-bold">Backup</span>
+            <HardDrive className="h-7 w-7 text-amber-400" />
+            <span className="text-xs sm:text-sm font-bold">Backup</span>
           </button>
         </div>
       </nav>
