@@ -45,6 +45,14 @@ export async function getAllCards(): Promise<LoyaltyCard[]> {
   const db = await getDb();
   const cards = await db.getAll(STORE_NAME);
   return cards.sort((a, b) => {
+    const aHasOrder = typeof a.sortOrder === 'number';
+    const bHasOrder = typeof b.sortOrder === 'number';
+    if (aHasOrder && bHasOrder && a.sortOrder !== b.sortOrder) {
+      return a.sortOrder! - b.sortOrder!;
+    }
+    if (aHasOrder !== bHasOrder) {
+      return aHasOrder ? -1 : 1;
+    }
     if (a.isFavorite !== b.isFavorite) {
       return a.isFavorite ? -1 : 1;
     }
@@ -52,6 +60,20 @@ export async function getAllCards(): Promise<LoyaltyCard[]> {
     if (usageDiff !== 0) return usageDiff;
     return (b.createdAt || 0) - (a.createdAt || 0);
   });
+}
+
+export async function updateCardOrders(orderedIds: string[]): Promise<void> {
+  if (orderedIds.length === 0) return;
+  const db = await getDb();
+  const tx = db.transaction(STORE_NAME, 'readwrite');
+  for (let idx = 0; idx < orderedIds.length; idx++) {
+    const card = await tx.store.get(orderedIds[idx]);
+    if (card) {
+      await tx.store.put({ ...card, sortOrder: idx });
+    }
+  }
+  await tx.done;
+  void pushCardsToSyncServer();
 }
 
 function isLocalSyncHost(): boolean {
@@ -327,6 +349,7 @@ export function parseAndNormalizeBackup(jsonString: string): LoyaltyCard[] {
       holderName: typeof raw.holderName === 'string' ? raw.holderName : undefined,
       notes: typeof raw.notes === 'string' ? raw.notes : undefined,
       isFavorite: Boolean(raw.isFavorite),
+      sortOrder: typeof raw.sortOrder === 'number' && Number.isFinite(raw.sortOrder) ? raw.sortOrder : undefined,
       usageCount: typeof raw.usageCount === 'number' && Number.isFinite(raw.usageCount) ? raw.usageCount : 0,
       lastUsedAt: typeof raw.lastUsedAt === 'number' ? raw.lastUsedAt : undefined,
       createdAt: typeof raw.createdAt === 'number' ? raw.createdAt : Date.now(),

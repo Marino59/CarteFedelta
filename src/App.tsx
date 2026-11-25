@@ -1,10 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  ArrowDown,
   ArrowDownAZ,
+  ArrowUp,
+  ArrowUpDown,
   Barcode,
   Camera,
+  Check,
+  ChevronRight,
   CreditCard,
   FolderUp,
+  GripVertical,
   HardDrive,
   ImagePlus,
   Plus,
@@ -29,6 +35,7 @@ import {
   saveMultipleCards,
   syncFromServerOrHash,
   toggleCardFavorite,
+  updateCardOrders,
 } from './services/db';
 import { CATEGORY_OPTIONS, type CardCategory, type LoyaltyCard } from './types/card';
 
@@ -37,14 +44,16 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
 }
 
-type SortMode = 'smart' | 'alpha' | 'recent';
+type SortMode = 'custom' | 'smart' | 'alpha' | 'recent';
 
 export function App() {
   const [cards, setCards] = useState<LoyaltyCard[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<'all' | CardCategory>('all');
-  const [sortMode, setSortMode] = useState<SortMode>('smart');
+  const [sortMode, setSortMode] = useState<SortMode>('custom');
+  const [isReordering, setIsReordering] = useState(false);
+  const [draggedId, setDraggedId] = useState<string | null>(null);
   const [isOffline, setIsOffline] = useState(
     typeof navigator !== 'undefined' ? !navigator.onLine : false
   );
@@ -195,6 +204,16 @@ export function App() {
     });
 
     return [...filtered].sort((a, b) => {
+      if (sortMode === 'custom') {
+        const aHasOrder = typeof a.sortOrder === 'number';
+        const bHasOrder = typeof b.sortOrder === 'number';
+        if (aHasOrder && bHasOrder && a.sortOrder !== b.sortOrder) {
+          return a.sortOrder! - b.sortOrder!;
+        }
+        if (aHasOrder !== bHasOrder) return aHasOrder ? -1 : 1;
+        if (a.isFavorite !== b.isFavorite) return a.isFavorite ? -1 : 1;
+        return (b.createdAt || 0) - (a.createdAt || 0);
+      }
       if (sortMode === 'alpha') {
         return a.storeName.localeCompare(b.storeName, 'it');
       }
@@ -210,32 +229,96 @@ export function App() {
   }, [cards, searchQuery, selectedCategory, sortMode]);
 
   const cycleSortMode = () => {
-    setSortMode((prev) => (prev === 'smart' ? 'alpha' : prev === 'alpha' ? 'recent' : 'smart'));
+    setIsReordering(false);
+    setSortMode((prev) =>
+      prev === 'custom'
+        ? 'smart'
+        : prev === 'smart'
+          ? 'alpha'
+          : prev === 'alpha'
+            ? 'recent'
+            : 'custom'
+    );
   };
 
   const sortLabel =
-    sortMode === 'smart' ? 'Più usate' : sortMode === 'alpha' ? 'A–Z' : 'Recenti';
+    sortMode === 'custom'
+      ? 'Personale'
+      : sortMode === 'smart'
+        ? 'Più usate'
+        : sortMode === 'alpha'
+          ? 'A–Z'
+          : 'Recenti';
+
+  const applyCustomOrder = async (newList: LoyaltyCard[]) => {
+    const withOrder = newList.map((c, idx) => ({ ...c, sortOrder: idx }));
+    setCards(withOrder);
+    setSortMode('custom');
+    await updateCardOrders(withOrder.map((c) => c.id));
+  };
+
+  const moveCardStep = async (cardId: string, direction: -1 | 1) => {
+    const currentOrder = [...cards].sort((a, b) => {
+      const aHas = typeof a.sortOrder === 'number';
+      const bHas = typeof b.sortOrder === 'number';
+      if (aHas && bHas && a.sortOrder !== b.sortOrder) return a.sortOrder! - b.sortOrder!;
+      if (aHas !== bHas) return aHas ? -1 : 1;
+      if (a.isFavorite !== b.isFavorite) return a.isFavorite ? -1 : 1;
+      return (b.createdAt || 0) - (a.createdAt || 0);
+    });
+    const idx = currentOrder.findIndex((c) => c.id === cardId);
+    const targetIdx = idx + direction;
+    if (idx < 0 || targetIdx < 0 || targetIdx >= currentOrder.length) return;
+    const [moved] = currentOrder.splice(idx, 1);
+    currentOrder.splice(targetIdx, 0, moved);
+    await applyCustomOrder(currentOrder);
+  };
+
+  const moveCardToTarget = async (sourceId: string, targetId: string) => {
+    if (sourceId === targetId) return;
+    const currentOrder = [...displayedCards];
+    const fromIdx = currentOrder.findIndex((c) => c.id === sourceId);
+    const toIdx = currentOrder.findIndex((c) => c.id === targetId);
+    if (fromIdx < 0 || toIdx < 0) return;
+    const [moved] = currentOrder.splice(fromIdx, 1);
+    currentOrder.splice(toIdx, 0, moved);
+    // Preserva eventuali carte filtrate fuori alla fine
+    const inOrderIds = new Set(currentOrder.map((c) => c.id));
+    const remaining = cards.filter((c) => !inOrderIds.has(c.id));
+    await applyCustomOrder([...currentOrder, ...remaining]);
+  };
+
+  const toggleReorderMode = () => {
+    if (!isReordering) {
+      setSearchQuery('');
+      setSelectedCategory('all');
+      setSortMode('custom');
+      setIsReordering(true);
+    } else {
+      setIsReordering(false);
+    }
+  };
 
   return (
-    <div className="min-h-[100dvh] flex flex-col bg-slate-950 text-slate-100 safe-top pb-[calc(5.75rem+env(safe-area-inset-bottom))]">
+    <div className="min-h-[100dvh] flex flex-col bg-slate-950 text-slate-100 safe-top pb-[calc(6.75rem+env(safe-area-inset-bottom))]">
       {/* Sticky Glass Header */}
-      <header className="sticky top-0 z-30 border-b border-slate-800/80 bg-slate-950/85 px-4 py-3 backdrop-blur-md">
-        <div className="mx-auto flex max-w-2xl items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-indigo-700 shadow-md shadow-indigo-950/60">
-              <Barcode className="h-5 w-5 text-white" />
+      <header className="sticky top-0 z-30 border-b border-slate-800/80 bg-slate-950/90 px-4 py-3.5 backdrop-blur-md">
+        <div className="mx-auto flex max-w-xl items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-indigo-700 shadow-md shadow-indigo-950/60">
+              <Barcode className="h-6 w-6 text-white" />
             </div>
             <div className="min-w-0">
-              <h1 className="truncate text-lg font-bold tracking-tight text-white">
+              <h1 className="truncate text-xl font-bold tracking-tight text-white">
                 Carte Fedeltà
               </h1>
-              <div className="flex items-center gap-2 text-[11px] text-slate-400">
+              <div className="flex items-center gap-2 text-xs text-slate-400">
                 <span>
                   {cards.length} {cards.length === 1 ? 'carta salvata' : 'carte salvate'}
                 </span>
                 {isOffline && (
                   <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-amber-300">
-                    <WifiOff className="h-3 w-3" />
+                    <WifiOff className="h-3.5 w-3.5" />
                     Offline
                   </span>
                 )}
@@ -243,119 +326,148 @@ export function App() {
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-2">
             {cards.length > 0 && (
               <button
                 type="button"
                 onClick={() => setBackupOpen(true)}
-                className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl bg-indigo-600/20 border border-indigo-500/35 px-2.5 sm:px-3 text-xs font-semibold text-indigo-200 active:scale-95 transition-transform"
+                className="inline-flex min-h-[52px] items-center gap-1.5 rounded-2xl bg-indigo-600/20 border border-indigo-500/35 px-3.5 text-sm font-bold text-indigo-200 active:scale-95 transition-transform"
                 title="Passa le carte al telefonino via QR"
               >
-                <QrCode className="h-4 w-4 text-indigo-400" />
-                <span className="hidden xs:inline sm:inline">Passa al Telefono</span>
+                <QrCode className="h-5 w-5 text-indigo-400" />
+                <span className="hidden sm:inline">Passa al Telefono</span>
               </button>
             )}
-            <button
-              type="button"
-              onClick={() => setKlarnaOpen(true)}
-              className="hidden sm:inline-flex min-h-[44px] items-center gap-1.5 rounded-xl bg-pink-600/20 border border-pink-500/35 px-3 text-xs font-semibold text-pink-200 active:scale-95 transition-transform"
-            >
-              <FolderUp className="h-4 w-4 text-pink-400" />
-              Da Klarna
-            </button>
             <button
               type="button"
               onClick={() =>
                 setAddModalState({ open: true, initialTab: 'manual', editingCard: null })
               }
-              className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-md active:scale-95 transition-transform"
+              className="flex min-h-[52px] min-w-[52px] items-center justify-center gap-1.5 rounded-2xl bg-indigo-600 px-3.5 text-sm font-bold text-white shadow-lg active:scale-95 transition-transform"
               aria-label="Aggiungi carta"
             >
               <Plus className="h-6 w-6" />
+              <span className="hidden sm:inline">Nuova</span>
             </button>
           </div>
         </div>
 
-        {/* Barra di ricerca e filtri */}
+        {/* Barra di ricerca, Riordina e Filtri */}
         {cards.length > 0 && (
-          <div className="mx-auto mt-3 max-w-2xl space-y-2.5">
+          <div className="mx-auto mt-3.5 max-w-xl space-y-3">
             <div className="flex items-center gap-2">
               <div className="relative flex-1">
-                <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                <Search className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" />
                 <input
                   type="search"
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onChange={(e) => {
+                    setIsReordering(false);
+                    setSearchQuery(e.target.value);
+                  }}
                   placeholder="Cerca negozio o codice..."
-                  className="w-full min-h-[46px] rounded-2xl border border-slate-800 bg-slate-900/90 pl-10 pr-9 text-sm text-white placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none"
+                  className="w-full min-h-[52px] rounded-2xl border border-slate-800 bg-slate-900/90 pl-11 pr-10 text-base text-white placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none"
                 />
                 {searchQuery && (
                   <button
                     type="button"
                     onClick={() => setSearchQuery('')}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center rounded-full text-slate-400"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 flex h-10 w-10 items-center justify-center rounded-full text-slate-400"
                     aria-label="Pulisci ricerca"
                   >
-                    <X className="h-4 w-4" />
+                    <X className="h-5 w-5" />
                   </button>
                 )}
               </div>
 
-              <button
-                type="button"
-                onClick={cycleSortMode}
-                className="flex min-h-[46px] shrink-0 items-center gap-1.5 rounded-2xl border border-slate-800 bg-slate-900 px-3 text-xs font-semibold text-slate-300 active:scale-95 transition-transform"
-                title="Cambia ordinamento"
-              >
-                <ArrowDownAZ className="h-4 w-4 text-indigo-400" />
-                <span>{sortLabel}</span>
-              </button>
+              {cards.length > 1 && (
+                <button
+                  type="button"
+                  onClick={toggleReorderMode}
+                  className={`flex min-h-[52px] shrink-0 items-center gap-1.5 rounded-2xl border px-3.5 text-sm font-bold active:scale-95 transition-all ${
+                    isReordering
+                      ? 'border-emerald-500 bg-emerald-600 text-white shadow-md'
+                      : 'border-slate-800 bg-slate-900 text-slate-200'
+                  }`}
+                >
+                  {isReordering ? (
+                    <>
+                      <Check className="h-5 w-5" />
+                      <span>Fatto</span>
+                    </>
+                  ) : (
+                    <>
+                      <ArrowUpDown className="h-5 w-5 text-indigo-400" />
+                      <span>Ordina</span>
+                    </>
+                  )}
+                </button>
+              )}
+
+              {!isReordering && (
+                <button
+                  type="button"
+                  onClick={cycleSortMode}
+                  className="flex min-h-[52px] shrink-0 items-center gap-1.5 rounded-2xl border border-slate-800 bg-slate-900 px-3 text-xs font-bold text-slate-300 active:scale-95 transition-transform"
+                  title="Cambia ordinamento"
+                >
+                  <ArrowDownAZ className="h-5 w-5 text-indigo-400" />
+                  <span className="hidden xs:inline sm:inline">{sortLabel}</span>
+                </button>
+              )}
             </div>
 
-            {/* Horizontal Snap Categories */}
-            <div className="flex gap-2 overflow-x-auto snap-x snap-mandatory no-scrollbar pb-0.5">
-              <button
-                type="button"
-                onClick={() => setSelectedCategory('all')}
-                className={`snap-start shrink-0 min-h-[38px] rounded-full px-3.5 text-xs font-semibold transition-colors ${
-                  selectedCategory === 'all'
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-slate-900 text-slate-400 border border-slate-800'
-                }`}
-              >
-                Tutte ({cards.length})
-              </button>
-              {CATEGORY_OPTIONS.map((cat) => {
-                const count = cards.filter((c) => c.category === cat.value).length;
-                if (count === 0) return null;
-                return (
-                  <button
-                    key={cat.value}
-                    type="button"
-                    onClick={() => setSelectedCategory(cat.value)}
-                    className={`snap-start shrink-0 min-h-[38px] rounded-full px-3.5 text-xs font-semibold transition-colors ${
-                      selectedCategory === cat.value
-                        ? 'bg-indigo-600 text-white'
-                        : 'bg-slate-900 text-slate-400 border border-slate-800'
-                    }`}
-                  >
-                    {cat.label} ({count})
-                  </button>
-                );
-              })}
-            </div>
+            {isReordering ? (
+              <div className="rounded-2xl border border-indigo-500/35 bg-indigo-950/40 px-4 py-2.5 text-xs font-medium text-indigo-200">
+                Usa i pulsanti grandi <strong className="text-white">↑</strong> e{' '}
+                <strong className="text-white">↓</strong> per spostare le carte nell’ordine che preferisci, poi tocca <strong className="text-white">Fatto</strong>.
+              </div>
+            ) : (
+              /* Horizontal Snap Categories */
+              <div className="flex gap-2 overflow-x-auto snap-x snap-mandatory no-scrollbar pb-0.5">
+                <button
+                  type="button"
+                  onClick={() => setSelectedCategory('all')}
+                  className={`snap-start shrink-0 min-h-[44px] rounded-full px-4 text-sm font-semibold transition-colors ${
+                    selectedCategory === 'all'
+                      ? 'bg-indigo-600 text-white'
+                      : 'bg-slate-900 text-slate-400 border border-slate-800'
+                  }`}
+                >
+                  Tutte ({cards.length})
+                </button>
+                {CATEGORY_OPTIONS.map((cat) => {
+                  const count = cards.filter((c) => c.category === cat.value).length;
+                  if (count === 0) return null;
+                  return (
+                    <button
+                      key={cat.value}
+                      type="button"
+                      onClick={() => setSelectedCategory(cat.value)}
+                      className={`snap-start shrink-0 min-h-[44px] rounded-full px-4 text-sm font-semibold transition-colors ${
+                        selectedCategory === cat.value
+                          ? 'bg-indigo-600 text-white'
+                          : 'bg-slate-900 text-slate-400 border border-slate-800'
+                      }`}
+                    >
+                      {cat.label} ({count})
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
       </header>
 
       {/* Main Content */}
-      <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-4">
+      <main className="mx-auto w-full max-w-xl flex-1 px-4 py-4">
         {loading ? (
-          <div className="grid grid-cols-2 gap-3">
+          <div className="flex flex-col gap-3.5">
             {[1, 2, 3, 4].map((n) => (
               <div
                 key={n}
-                className="h-36 animate-pulse rounded-3xl bg-slate-900 border border-slate-800"
+                className="h-24 animate-pulse rounded-3xl bg-slate-900 border border-slate-800"
               />
             ))}
           </div>
@@ -371,21 +483,21 @@ export function App() {
                 Salva tutte le tue tessere sul telefonino in modo sicuro e offline. Mostrale alla cassa in un attimo.
               </p>
 
-              <div className="mt-6 grid grid-cols-1 gap-3 text-left">
+              <div className="mt-6 grid grid-cols-1 gap-3.5 text-left">
                 <button
                   type="button"
                   onClick={() =>
                     setAddModalState({ open: true, initialTab: 'photo', editingCard: null })
                   }
-                  className="flex min-h-[72px] items-center gap-4 rounded-2xl bg-indigo-600 p-4 text-white shadow-lg shadow-indigo-950/60 active:scale-[0.98] transition-transform"
+                  className="flex min-h-[84px] items-center gap-4 rounded-2xl bg-indigo-600 p-4 text-white shadow-lg shadow-indigo-950/60 active:scale-[0.98] transition-transform"
                 >
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/15">
-                    <Camera className="h-6 w-6" />
+                  <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/15">
+                    <Camera className="h-7 w-7" />
                   </div>
                   <div>
-                    <p className="font-bold text-base">Fotografa o Scansiona una tessera</p>
+                    <p className="font-bold text-lg">Fotografa o Scansiona</p>
                     <p className="text-xs text-indigo-100/85">
-                      Legge il codice a barre dalla fotocamera o da una foto fronte/retro
+                      Legge il codice a barre dalla fotocamera o da una foto
                     </p>
                   </div>
                 </button>
@@ -393,13 +505,13 @@ export function App() {
                 <button
                   type="button"
                   onClick={() => setKlarnaOpen(true)}
-                  className="flex min-h-[72px] items-center gap-4 rounded-2xl border border-pink-500/35 bg-pink-950/35 p-4 text-white active:scale-[0.98] transition-transform"
+                  className="flex min-h-[84px] items-center gap-4 rounded-2xl border border-pink-500/35 bg-pink-950/35 p-4 text-white active:scale-[0.98] transition-transform"
                 >
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-pink-500/25">
-                    <Sparkles className="h-6 w-6 text-pink-300" />
+                  <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-pink-500/25">
+                    <Sparkles className="h-7 w-7 text-pink-300" />
                   </div>
                   <div>
-                    <p className="font-bold text-base">Trasferisci le carte da Klarna</p>
+                    <p className="font-bold text-lg">Trasferisci da Klarna</p>
                     <p className="text-xs text-pink-200/80">
                       Copia e incolla dal PC oppure carica foto dei codici
                     </p>
@@ -410,102 +522,170 @@ export function App() {
           </div>
         ) : displayedCards.length === 0 ? (
           <div className="mt-10 text-center space-y-3">
-            <p className="text-sm text-slate-400">Nessuna carta trovata per la ricerca corrente.</p>
+            <p className="text-base text-slate-400">Nessuna carta trovata per la ricerca corrente.</p>
             <button
               type="button"
               onClick={() => {
                 setSearchQuery('');
                 setSelectedCategory('all');
               }}
-              className="min-h-[44px] rounded-xl bg-slate-800 px-4 text-xs font-semibold text-white"
+              className="min-h-[52px] rounded-2xl bg-slate-800 px-6 text-sm font-bold text-white"
             >
               Mostra tutte le carte
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            {displayedCards.map((card) => (
+          /* Lista a singola fila ottimizzata per telefonino */
+          <div className="flex flex-col gap-3.5">
+            {displayedCards.map((card, index) => (
               <div
                 key={card.id}
-                onClick={() => handleOpenCard(card)}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    handleOpenCard(card);
+                draggable={isReordering}
+                onDragStart={() => setDraggedId(card.id)}
+                onDragOver={(e) => {
+                  if (isReordering) e.preventDefault();
+                }}
+                onDrop={() => {
+                  if (isReordering && draggedId) {
+                    void moveCardToTarget(draggedId, card.id);
+                    setDraggedId(null);
                   }
                 }}
-                className="group relative flex flex-col justify-between overflow-hidden rounded-3xl border border-white/10 bg-slate-900 shadow-lg cursor-pointer active:scale-[0.97] transition-transform min-h-[146px]"
+                onDragEnd={() => setDraggedId(null)}
+                onClick={() => {
+                  if (!isReordering) void handleOpenCard(card);
+                }}
+                role={isReordering ? undefined : 'button'}
+                tabIndex={isReordering ? undefined : 0}
+                onKeyDown={(e) => {
+                  if (!isReordering && (e.key === 'Enter' || e.key === ' ')) {
+                    e.preventDefault();
+                    void handleOpenCard(card);
+                  }
+                }}
+                className={`group relative flex items-stretch overflow-hidden rounded-3xl border bg-slate-900 shadow-lg transition-transform min-h-[96px] ${
+                  isReordering
+                    ? 'border-indigo-500/45'
+                    : 'border-white/10 cursor-pointer active:scale-[0.98]'
+                }`}
               >
-                {/* Testata colorata del brand */}
+                {/* Banda laterale colore brand */}
                 <div
-                  className="relative px-3.5 pt-3.5 pb-4"
-                  style={{
-                    background: `linear-gradient(135deg, ${card.color} 0%, ${card.color}cc 100%)`,
-                  }}
-                >
-                  <div className="flex items-start justify-between gap-1">
-                    <span className="line-clamp-2 text-base font-bold leading-tight text-white drop-shadow-sm">
-                      {card.storeName}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleToggleFavorite(card.id);
-                      }}
-                      className="-mr-1.5 -mt-1.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black/20 text-white"
-                      aria-label={card.isFavorite ? 'Togli preferito' : 'Metti tra preferiti'}
-                    >
-                      <Star
-                        className={`h-4 w-4 ${
-                          card.isFavorite ? 'fill-amber-300 text-amber-300' : 'text-white/75'
-                        }`}
-                      />
-                    </button>
+                  className="w-3.5 shrink-0"
+                  style={{ backgroundColor: card.color }}
+                />
+
+                {/* Badge icona/iniziale negozio */}
+                <div className="flex items-center pl-3.5 py-3">
+                  <div
+                    className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl text-lg font-extrabold text-white shadow-inner"
+                    style={{
+                      background: `linear-gradient(135deg, ${card.color} 0%, ${card.color}bb 100%)`,
+                    }}
+                  >
+                    {card.storeName.trim().slice(0, 2).toUpperCase()}
                   </div>
                 </div>
 
-                {/* Parte inferiore con mini badge barcode e numero */}
-                <div className="flex flex-1 flex-col justify-between bg-slate-900 px-3.5 py-2.5">
-                  <p className="truncate font-mono text-xs text-slate-300">
+                {/* Testo principale della scheda */}
+                <div className="flex-1 min-w-0 px-3.5 py-3 flex flex-col justify-center">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate text-lg sm:text-xl font-bold leading-tight text-white">
+                      {card.storeName}
+                    </span>
+                    {card.isFavorite && !isReordering && (
+                      <Star className="h-4 w-4 shrink-0 fill-amber-300 text-amber-300" />
+                    )}
+                  </div>
+
+                  <p className="mt-1 truncate font-mono text-sm text-slate-300">
                     {formatCodeGroups(card.cardNumber)}
                   </p>
-                  <div className="mt-2 flex items-center justify-between text-[10px] text-slate-500">
-                    <span className="inline-flex items-center gap-1 font-medium text-slate-400">
-                      <Barcode className="h-3.5 w-3.5 text-indigo-400" />
+
+                  <div className="mt-1.5 flex items-center gap-2 text-xs text-slate-400">
+                    <span className="inline-flex items-center gap-1 font-medium">
+                      <Barcode className="h-4 w-4 text-indigo-400" />
                       {card.barcodeFormat}
                     </span>
                     {card.source === 'klarna' ? (
-                      <span className="rounded-md bg-pink-500/15 px-1.5 py-0.5 text-pink-300 font-medium">
+                      <span className="rounded-md bg-pink-500/15 px-2 py-0.5 text-[11px] text-pink-300 font-semibold">
                         Klarna
                       </span>
                     ) : card.frontImage || card.backImage ? (
-                      <span className="rounded-md bg-slate-800 px-1.5 py-0.5 text-slate-300">
+                      <span className="rounded-md bg-slate-800 px-2 py-0.5 text-[11px] text-slate-300 font-medium">
                         Foto
                       </span>
                     ) : null}
                   </div>
                 </div>
+
+                {/* Azioni a destra: Frecce grandi in modalità Ordina oppure Stella + Freccia */}
+                {isReordering ? (
+                  <div className="flex items-center gap-1.5 pr-3">
+                    <GripVertical className="hidden sm:block h-5 w-5 text-slate-500 mr-1" />
+                    <button
+                      type="button"
+                      disabled={index === 0}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void moveCardStep(card.id, -1);
+                      }}
+                      className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-800 text-white active:scale-90 transition-transform disabled:opacity-30"
+                      aria-label="Sposta su"
+                    >
+                      <ArrowUp className="h-6 w-6" />
+                    </button>
+                    <button
+                      type="button"
+                      disabled={index === displayedCards.length - 1}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void moveCardStep(card.id, 1);
+                      }}
+                      className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-800 text-white active:scale-90 transition-transform disabled:opacity-30"
+                      aria-label="Sposta giù"
+                    >
+                      <ArrowDown className="h-6 w-6" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1 pr-3">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void handleToggleFavorite(card.id);
+                      }}
+                      className="flex h-12 w-12 items-center justify-center rounded-2xl text-slate-400 hover:bg-slate-800/70 active:scale-90 transition-transform"
+                      aria-label={card.isFavorite ? 'Togli preferito' : 'Metti tra preferiti'}
+                    >
+                      <Star
+                        className={`h-5 w-5 ${
+                          card.isFavorite ? 'fill-amber-300 text-amber-300' : 'text-slate-500'
+                        }`}
+                      />
+                    </button>
+                    <ChevronRight className="h-5 w-5 text-slate-600" />
+                  </div>
+                )}
               </div>
             ))}
           </div>
         )}
       </main>
 
-      {/* Bottom Navigation Bar Ergonomica (Thumb Zone) */}
-      <nav className="fixed bottom-0 inset-x-0 z-40 border-t border-slate-800/80 bg-slate-950/92 backdrop-blur-lg safe-bottom">
-        <div className="mx-auto flex h-[68px] max-w-2xl items-center justify-around px-2">
+      {/* Bottom Navigation Bar Ergonomica con Pulsanti Grandi (Thumb Zone) */}
+      <nav className="fixed bottom-0 inset-x-0 z-40 border-t border-slate-800/80 bg-slate-950/95 backdrop-blur-lg safe-bottom">
+        <div className="mx-auto flex h-[80px] max-w-xl items-center justify-around gap-1.5 px-2.5">
           <button
             type="button"
             onClick={() =>
               setAddModalState({ open: true, initialTab: 'camera', editingCard: null })
             }
-            className="flex flex-1 min-h-[52px] flex-col items-center justify-center gap-1 rounded-2xl text-slate-300 hover:text-white active:scale-95 transition-transform"
+            className="flex flex-1 min-h-[62px] flex-col items-center justify-center gap-1 rounded-2xl bg-slate-900/80 text-slate-200 active:scale-95 transition-transform"
           >
-            <Camera className="h-5 w-5 text-indigo-400" />
-            <span className="text-[11px] font-semibold">Scansiona</span>
+            <Camera className="h-6 w-6 text-indigo-400" />
+            <span className="text-xs font-bold">Scansiona</span>
           </button>
 
           <button
@@ -513,28 +693,28 @@ export function App() {
             onClick={() =>
               setAddModalState({ open: true, initialTab: 'photo', editingCard: null })
             }
-            className="flex flex-1 min-h-[52px] flex-col items-center justify-center gap-1 rounded-2xl text-slate-300 hover:text-white active:scale-95 transition-transform"
+            className="flex flex-1 min-h-[62px] flex-col items-center justify-center gap-1 rounded-2xl bg-slate-900/80 text-slate-200 active:scale-95 transition-transform"
           >
-            <ImagePlus className="h-5 w-5 text-emerald-400" />
-            <span className="text-[11px] font-semibold">Fotografa</span>
+            <ImagePlus className="h-6 w-6 text-emerald-400" />
+            <span className="text-xs font-bold">Fotografa</span>
           </button>
 
           <button
             type="button"
             onClick={() => setKlarnaOpen(true)}
-            className="flex flex-1 min-h-[52px] flex-col items-center justify-center gap-1 rounded-2xl text-slate-300 hover:text-white active:scale-95 transition-transform"
+            className="flex flex-1 min-h-[62px] flex-col items-center justify-center gap-1 rounded-2xl bg-slate-900/80 text-slate-200 active:scale-95 transition-transform"
           >
-            <FolderUp className="h-5 w-5 text-pink-400" />
-            <span className="text-[11px] font-semibold">Da Klarna</span>
+            <FolderUp className="h-6 w-6 text-pink-400" />
+            <span className="text-xs font-bold">Da Klarna</span>
           </button>
 
           <button
             type="button"
             onClick={() => setBackupOpen(true)}
-            className="flex flex-1 min-h-[52px] flex-col items-center justify-center gap-1 rounded-2xl text-slate-300 hover:text-white active:scale-95 transition-transform"
+            className="flex flex-1 min-h-[62px] flex-col items-center justify-center gap-1 rounded-2xl bg-slate-900/80 text-slate-200 active:scale-95 transition-transform"
           >
-            <HardDrive className="h-5 w-5 text-amber-400" />
-            <span className="text-[11px] font-semibold">Backup / App</span>
+            <HardDrive className="h-6 w-6 text-amber-400" />
+            <span className="text-xs font-bold">Backup</span>
           </button>
         </div>
       </nav>

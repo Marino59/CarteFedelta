@@ -28,6 +28,7 @@ export interface LoyaltyCard {
   holderName?: string;
   notes?: string;
   isFavorite: boolean;
+  sortOrder?: number;
   usageCount: number;
   lastUsedAt?: number;
   createdAt: number;
